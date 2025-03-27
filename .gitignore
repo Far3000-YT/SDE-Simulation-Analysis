@@ -1,0 +1,19 @@
+#Virtual Environment
+venv/
+/venv/
+*.pyc
+__pycache__/
+
+#VS Code
+.vscode/
+
+#Jupyter Notebook Checkpoints
+.ipynb_checkpoints/
+
+#Output folder (we'll create this later)
+output/
+
+#IDE specific files
+.idea/
+*.swp
+*.swo
