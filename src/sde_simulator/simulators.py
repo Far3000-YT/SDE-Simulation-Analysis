@@ -36,10 +36,14 @@ def simulate_gbm_em(s0, mu, sigma, T, dt):
     return t, S
 
 
-def simulate_gbm_em_vectorized(s0, mu, sigma, T, dt, num_paths):
+def simulate_gbm_em_vectorized(s0, mu, sigma, T, dt, num_paths, Z = None):
     n_steps = int(T / dt)
     t = np.linspace(0, T, n_steps + 1)
     
+    #random Z (to compare the EM and Milstein with same Z)
+    if Z is None: Z = np.random.normal(0, 1, size=(n_steps, num_paths))
+    elif Z.shape != (n_steps, num_paths): raise ValueError("Provided Z array has incorrect shape")
+
     #same as before, but basically multiple times (1000 times for example)
     S = np.zeros((n_steps + 1, num_paths))
     S[0, :] = s0 #initial price for ALL the prices
@@ -57,7 +61,7 @@ def simulate_gbm_em_vectorized(s0, mu, sigma, T, dt, num_paths):
     return t, S
 
 
-def simulate_gbm_milstein_vectorized(s0, mu, sigma, T, dt, num_paths, Z=None):
+def simulate_gbm_milstein_vectorized(s0, mu, sigma, T, dt, num_paths, Z = None):
     #same variables as before !
     n_steps = int(T / dt)
     t = np.linspace(0, T, n_steps + 1)
