@@ -47,14 +47,12 @@ def simulate_gbm_em_vectorized(s0, mu, sigma, T, dt, num_paths, Z = None):
     #same as before, but basically multiple times (1000 times for example)
     S = np.zeros((n_steps + 1, num_paths))
     S[0, :] = s0 #initial price for ALL the prices
-
-    Z_all = np.random.normal(0, 1, size=(n_steps, num_paths)) 
     
     sqrt_dt = np.sqrt(dt)
 
     for i in range(n_steps):
         S_prev = S[i, :] 
-        Z_step = Z_all[i, :] 
+        Z_step = Z[i, :] #fixed Z defined twice, so breaking the other graphs and errors calc
 
         S[i+1, :] = S_prev + (sigma * S_prev * Z_step * sqrt_dt) + (mu * S_prev * dt) #same formula as above but we vectorized it
 
