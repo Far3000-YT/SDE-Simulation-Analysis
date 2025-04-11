@@ -213,3 +213,75 @@ def simulate_cir_milstein_vectorized(x0, theta, kappa, sigma, T, dt, num_paths, 
         X[i+1, :] = np.maximum(0, em_step + milstein_correction) #full truncation/reflection after step
 
     return t, X
+
+
+def simulate_merton_jd_vectorized(s0, mu, sigma, lambda_jump, k_jump, nu_jump, T, dt, num_paths, Z=None):
+    #simulates Merton Jump-Diffusion model using Euler scheme + Poisson jumps
+    n_steps = int(T / dt)
+    t = np.linspace(0, T, n_steps + 1)
+
+    S = np.zeros((n_steps + 1, num_paths))
+    S[0, :] = s0
+
+    #generate standard normal random numbers for diffusion if not provided
+    if Z is None:
+        Z = np.random.normal(0, 1, size=(n_steps, num_paths))
+    elif Z.shape != (n_steps, num_paths):
+        raise ValueError("Provided Z array has incorrect shape")
+
+    #calculate adjusted drift for continuous part
+    drift_adj = mu - lambda_jump * k_jump 
+    
+    #jump parameters for ln(Y) ~ N(m, nu^2)
+    m_jump = np.log(1 + k_jump) - 0.5 * nu_jump**2
+    
+    sqrt_dt = np.sqrt(dt)
+
+    #loop through time steps
+    for i in range(n_steps):
+        S_prev = S[i, :]    
+        Z_step = Z[i, :]    
+        dW = Z_step * sqrt_dt
+
+        #1. continuous diffusion part (using adjusted drift)
+        S_cont = S_prev + (drift_adj * S_prev * dt) + (sigma * S_prev * dW)
+        
+        #2. jump part - simulate number of jumps in dt
+        poisson_mean = lambda_jump * dt
+        dN = np.random.poisson(poisson_mean, size=num_paths)
+        
+        #initialize jump multiplier to 1 (no jump effect)
+        jump_multiplier = np.ones(num_paths)
+        
+        #find paths that have jumps
+        jump_indices = np.where(dN > 0)[0]
+        
+        if len(jump_indices) > 0:
+            #only simulate jumps for paths that need them
+            num_jumps_this_step = dN[jump_indices] #array of jump counts (1, 2, 3...) for jumping paths
+            total_jumps_to_sim = np.sum(num_jumps_this_step) #total number of Y values needed
+            
+            #simulate all needed log-jump sizes at once
+            ln_Y = np.random.normal(loc=m_jump, scale=nu_jump, size=total_jumps_to_sim)
+            
+            #apply jumps cumulatively - this part is tricky to vectorize perfectly if dN > 1 often
+            #simpler approach: loop through max jumps, or calculate total jump factor
+            
+            #approach: calculate total jump factor using exp(sum(lnY))
+            total_lnY = np.zeros(len(jump_indices))
+            current_jump_idx = 0
+            for k, num_j in enumerate(num_jumps_this_step):
+                #sum the log jumps for path k (which has num_j jumps)
+                total_lnY[k] = np.sum(ln_Y[current_jump_idx : current_jump_idx + num_j])
+                current_jump_idx += num_j
+                
+            #calculate the multiplier exp(sum(lnY)) and place it in the correct indices
+            jump_multiplier[jump_indices] = np.exp(total_lnY)
+            
+        #3. apply jump multiplier
+        S[i+1, :] = S_cont * jump_multiplier
+        
+        #optional positivity enforcement (though jumps can make it negative if k is very negative)
+        S[i+1, :] = np.maximum(1e-8, S[i+1, :]) #small floor instead of zero
+
+    return t, S
