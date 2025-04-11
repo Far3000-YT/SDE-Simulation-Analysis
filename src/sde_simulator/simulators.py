@@ -170,3 +170,46 @@ def simulate_cir_em_vectorized(x0, theta, kappa, sigma, T, dt, num_paths, Z=None
         #X[i+1, :] = np.maximum(0, X[i+1, :]) #Reflection method essentially
 
     return t, X
+
+
+def simulate_cir_milstein_vectorized(x0, theta, kappa, sigma, T, dt, num_paths, Z=None):
+    #simulates CIR process using Milstein scheme
+    #includes positivity enforcement after the step
+    n_steps = int(T / dt)
+    t = np.linspace(0, T, n_steps + 1)
+
+    X = np.zeros((n_steps + 1, num_paths))
+    X[0, :] = x0
+
+    #generate random numbers if not provided
+    if Z is None:
+        Z = np.random.normal(0, 1, size=(n_steps, num_paths))
+    elif Z.shape != (n_steps, num_paths):
+        raise ValueError("Provided Z array has incorrect shape")
+
+    sqrt_dt = np.sqrt(dt)
+    
+    #precompute constants
+    theta_kappa_dt = theta * kappa * dt
+    one_minus_theta_dt = 1.0 - theta * dt
+    milstein_coeff = 0.25 * (sigma**2) * dt #constant part of correction
+
+    #loop through time steps
+    for i in range(n_steps):
+        X_prev = X[i, :]    
+        Z_step = Z[i, :]    
+        dW = Z_step * sqrt_dt
+
+        #ensure non-negative value inside sqrt for diffusion term calc
+        sqrt_X_prev_safe = np.sqrt(np.maximum(0, X_prev)) 
+
+        #calculate EM part first
+        em_step = theta_kappa_dt + X_prev * one_minus_theta_dt + sigma * sqrt_X_prev_safe * dW
+        
+        #calculate Milstein correction term
+        milstein_correction = milstein_coeff * (Z_step**2 - 1)
+        
+        #add correction and apply positivity enforcement
+        X[i+1, :] = np.maximum(0, em_step + milstein_correction) #full truncation/reflection after step
+
+    return t, X
