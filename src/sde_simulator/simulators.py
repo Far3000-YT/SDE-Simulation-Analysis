@@ -93,18 +93,13 @@ def simulate_gbm_milstein_vectorized(s0, mu, sigma, T, dt, num_paths, Z = None):
 
 
 def simulate_ou_em_vectorized(x0, theta, kappa, sigma, T, dt, num_paths, Z=None):
-    """
-    It simulates multiple paths of the Ornstein-Uhlenbeck process using the Euler-Maruyama process in a vectorized manner
+    #It simulates multiple paths of the Ornstein-Uhlenbeck process using the Euler-Maruyama process in a vectorized manner
 
-    x0 : initial value
-    theta : speed of mean reversion (theta > 0).
-    kappa : long-term mean level
-    sigma : volatility coefficient
-    T : time horizon (years)
-    dt : time step size
-    num_paths : number of paths
-    Z : pre-generated standard normal random numbers
-    """
+    #x0 : initial value
+    #theta : speed of mean reversion (theta > 0).
+    #kappa : long-term mean level
+    #sigma : volatility coefficient
+
 
     n_steps = int(T / dt)
     t = np.linspace(0, T, n_steps + 1)
@@ -132,5 +127,46 @@ def simulate_ou_em_vectorized(x0, theta, kappa, sigma, T, dt, num_paths, Z=None)
         X[i+1, :] = X_prev + theta * (kappa - X_prev) * dt + sigma * dW
 
         #and unlike GBM, OU process can become negative !
+
+    return t, X
+
+
+def simulate_cir_em_vectorized(x0, theta, kappa, sigma, T, dt, num_paths, Z=None):
+    #simulates CIR process using Euler-Maruyama with Full Truncation
+    n_steps = int(T / dt)
+    t = np.linspace(0, T, n_steps + 1)
+
+    X = np.zeros((n_steps + 1, num_paths))
+    X[0, :] = x0
+
+    #generate random numbers if not provided
+    if Z is None:
+        Z = np.random.normal(0, 1, size=(n_steps, num_paths))
+    elif Z.shape != (n_steps, num_paths):
+        raise ValueError("Provided Z array has incorrect shape")
+
+    sqrt_dt = np.sqrt(dt)
+    
+    #precompute constants
+    theta_kappa_dt = theta * kappa * dt
+    one_minus_theta_dt = 1.0 - theta * dt
+
+    #loop through time steps
+    for i in range(n_steps):
+        X_prev = X[i, :]    
+        Z_step = Z[i, :]    
+        dW = Z_step * sqrt_dt
+
+        #ensure non-negative value inside sqrt (Full Truncation)
+        sqrt_X_prev_safe = np.sqrt(np.maximum(0, X_prev)) 
+
+        #apply Euler-Maruyama formula for CIR
+        #dX = theta*(kappa - X)*dt + sigma*sqrt(X)*dW
+        #X[i+1] = X_prev + theta*kappa*dt - theta*X_prev*dt + sigma*sqrt(max(0,X_prev))*dW
+        #X[i+1] = theta_kappa_dt + X_prev*(1 - theta*dt) + sigma*sqrt_X_prev_safe*dW
+        X[i+1, :] = theta_kappa_dt + X_prev * one_minus_theta_dt + sigma * sqrt_X_prev_safe * dW
+        
+        #explicitly enforce positivity after step if desired (alternative scheme)
+        #X[i+1, :] = np.maximum(0, X[i+1, :]) #Reflection method essentially
 
     return t, X
